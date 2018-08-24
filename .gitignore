@@ -16,5 +16,16 @@ obj/
 geckodriver.log
 npm-debug.log
 yarn-error.log
+
+jk2client/build/CMakeCache.txt
+jk2client/build/CPackConfig.cmake
+jk2client/build/CPackSourceConfig.cmake
+jk2client/build/Makefile
+jk2client/build/cmake_install.cmake
+jk2client/build/install_manifest.txt
+jk2client/build/mv_setup.h
+jk2client/build/mvsdk_setup.h
+jk2client/src/mvsdk/
+
 #[except]
 #[endfi]
