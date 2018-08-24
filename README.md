@@ -18,6 +18,18 @@
 
 ## songlib
 
+### `make init`
+
+## sway
+
 ## tools
 
+### `make blocktoimg`
+
+### `make imgtoblock`
+
+### `make onetimepad`
+
 ## twttr
+
+---
