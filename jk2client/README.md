@@ -29,7 +29,7 @@ optimizations.
 Clone the JK2MV repository including submodules (required if you also want to
 build the [mvsdk](https://github.com/mvdevs/mvsdk) modules), e.g.:
 
-	`git clone --recursive https://github.com/mvdevs/jk2mv`
+	git clone --recursive https://github.com/mvdevs/jk2mv
 
 ### 2. Install [CMake](https://cmake.org)
 
