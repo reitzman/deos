@@ -1,0 +1,597 @@
+(define else #t)
+(define __builtin __context)
+(define __main-lib this)
+(define nil? null?)
+(define (valid? x) (not (null? x)))
+(define (head x) (car x))
+(define (tail x) (cdr x))
+(define (join x y) (cons x y))
+(define ^ expt)
+(define ** expt)
+(define string+ string-append)
+(define string-length length)
+
+(define (copy items)
+    (cond
+        ((null? items) nil)
+        (else (cons (car items) (copy (cdr items))))
+        )
+    )
+
+(define (deep-copy items)
+    (cond
+        ((pair? items) (cons (deep-copy (car items)) (deep-copy (cdr items))))
+        (else items)
+        )
+    )
+
+;;;;;;;;;;;; 
+;
+; This function can be used to non-destructively convert a built-in function
+;
+;     Example: convert a variadic built-in function to non-variadic lambda
+;
+;         (convertBuiltIn f '($ $items) '(@ items))
+;             this would create a lambda with the same semantics as f but
+;             takes a final list of arguments rather than being variadic.
+;
+;     Example: convert a built-in function that implicitly grabs the
+;         calling env to one which an environment is explicitly passed.
+;
+;         (convertBuiltIn f '((# env)))
+;             this would create a lambda with the same semantics as f but
+;             takes an explicit environment.
+;
+; The result is a lambda that must be bound in some way.
+;
+;     if (define a+ (convertBuiltIn + '(@ values))), then
+;     (+ 1 2 3 4) and (a+ '(1 2 3 4)) are equivalent
+;
+
+(define (convertBuiltIn closure @)
+    (define donor (lambda (x) x))
+    (set '__context (get '__context closure) donor)
+    (set '__label (get '__label closure) donor)
+    (set 'code (get 'code closure) donor)
+    (define params (copy (get 'parameters closure)))
+    (define p params)
+    (while (valid? p)
+        (define s @)
+        (while (valid? s)
+            (if (eq? (car p) (car (car s)))
+                (set-car! p (cadr (car s))))
+            (set! s (cdr s))
+            )
+        (set! p (cdr p))
+        )
+    (set 'parameters params donor)
+    donor
+    )
+
+(define oldInspect inspect)
+(define (inspect # $x)
+    (define old (setNilDisplay 'nil))
+    (if (valid? old) (setNilDisplay old))
+    (define result (pass oldInspect # $x))
+    (setNilDisplay old)
+    result
+    )
+
+(define (backquote # $items)
+    (define (helper items)
+        ;(inspect items)
+        ;(inspect (get '__context this))
+        (cond
+            ((null? items) nil)
+            ((eq? (car items) ',)
+                (cons (eval (cadr items) #) (helper (cddr items)))
+                )
+            (else
+                (cons (car items) (helper (cdr items)))
+                )
+            )
+        )
+    (helper $items)
+    )
+
+(define (set! # $x y @)
+    (define env (if (null? @) # (car @)))
+    (set $x y env)
+    )
+
+(define (set* @)
+    (define obj (car @))
+    (define fields (cdr @))
+    (while (valid? (cddr fields))
+        (set 'obj (obj (car fields)))
+        (set 'fields (cdr fields))
+        )
+    (set (car fields) (cadr fields) obj)
+    )
+
+(define (get* @)
+     (define obj (car @))
+     (define fields (cdr @))
+     (while (valid? (cdr fields))
+         (set 'obj (obj (car fields)))
+         (set 'fields (cdr fields))
+         )
+    (get (car fields) obj)
+    )
+
+
+(define (for # init $fortest $increment $)
+    (define forresult nil)
+    ;(println "for level: " __level)
+    (while (eval $fortest #)
+        (set 'forresult (evalList $ #))
+        (eval $increment #)
+        )
+    forresult
+    )
+
+(define (for-all # $indexVar items $)
+    (define result #f)
+    (while (!= items nil)
+        (set $indexVar (car items) #)
+        (set 'result (evalList $ #))
+        (set 'items (cdr items))
+        )
+    result
+    )
+
+(define (for-each f x)
+    (define (iter items)
+        (cond
+            ((null? items) nil)
+            (else (f (car items)) (iter (cdr items)))
+            )
+        )
+    (iter x)
+    )
+
+(define (+= # $v value) (set $v (+ (eval $v #) value) #))
+(define (-= # $v value) (set $v (- (eval $v #) value) #))
+(define (*= # $v value) (set $v (* (eval $v #) value) #))
+(define (/= # $v value) (set $v (/ (eval $v #) value) #))
+(define (++ # $v) (set $v (+ (eval $v #) 1) #))
+(define (-- # $v) (set $v (- (eval $v #) 1) #))
+(define (<- # $v value) (set $v value #))
+(define (assign # $v value) (set $v value #))
+
+
+; object-related functions
+
+(define __type type)
+
+(define (type x)
+    (if (and (eq? (__type x) 'CONS) (eq? (car x) '__object))
+        (get '__label x)
+        (__type x)
+        )
+    )
+
+(define (class x) (get '__label x))
+
+(define (is? x y)
+    (cond
+        ((null? x) #f)
+        ((not (environment? x)) (eq? (type x) y))
+        ((and (environment? x) (or (eq? y 'environment) (eq? y 'object))) #t)
+        ((and (valid? (get '__constructor x)) (eq? (get* x '__constructor 'name) y)) #t)
+        (else (and (local? 'parent x) (is? (get 'parent x) y)))
+        )
+    )
+
+(define (object? x) (and (pair? x) (eq? (car x) '__object)))
+(define (closure? x) (and (object? x) (eq? (class x) 'closure)))
+(define (builtin? x) (and (object? x) (eq? (class x) 'builtIn)))
+(define (error? x) (and (object? x) (eq? (class x) 'error)))
+(define (environment? x) (and (object? x) (eq? (class x) 'environment)))
+(define function? closure?)
+
+
+(define (and # $)
+    (define (iter items)
+        (cond
+           ((null? items) #t)
+           ((eval (car items) #) (iter (cdr items)))
+           (else #f)
+           )
+        )
+    (iter $)
+    )
+(define (or # $)
+    (define (iter items)
+        (cond
+           ((null? items) #f)
+           ((eval (car items) #) #t)
+           (else (iter (cdr items)))
+           )
+        )
+    (iter $)
+    )
+(define (dec x) (- x 1))
+(define (inc x) (+ x 1))
+
+(define __display display)
+(define (print @)
+    (while (valid? @)
+        (display (car @))
+        (set! @ (cdr @))
+        )
+    'print-done
+    )
+
+(define (println @)
+    (apply print @)
+    (print "\n")
+    )
+
+(define (let # $inits $)
+    (define v nil)
+    (define e (scope this))
+    (set '__context # e)
+    (for-all v $inits
+        (addSymbol (car v) (eval (car (cdr v)) #) e)
+        ;(println "adding " (car v) " from " $inits)
+        ;(println "    its value is " (eval (car (cdr v)) #))
+        ;(inspect e)
+        )
+    (evalList $ e)
+    )
+
+(define (pause)
+    (define old (setPort 'stdin))
+    (readRawChar)
+    (setPort old)
+    )
+
+(define (let* # $inits $)
+    (define v nil)
+    (define e (scope this))
+    (set '__context # e)
+    (for-all v $inits
+        (addSymbol (car v) (eval (car (cdr v)) e) e)
+        )
+    (evalList $ e)
+    )
+
+(define (evalList listOfitems env)
+    (while (valid? (cdr listOfitems)) ; for tail recursion
+         (eval (car listOfitems) env)
+         (set 'listOfitems (cdr listOfitems))
+         )
+    (eval (car listOfitems) env)
+    )
+
+(define (negative? n) (< n 0))
+(define (positive? n) (> n 0))
+
+(define (newline) (println))
+(define remainder %)
+(define (append a b)
+    (cond
+        ((null? a) b)
+        (else (cons (car a) (append (cdr a) b)))
+        )
+    )
+(define (last-pair x)
+    (cond
+        ((null? x) nil)
+        ((null? (cdr x)) x)
+        (else (last-pair (cdr x)))
+        )
+    )
+(define (reverse x)
+    (define (iter store rest)
+        (cond
+            ((null? rest) store)
+            (else (iter (cons (car rest) store) (cdr rest)))
+            )
+        )
+    (iter nil x)
+    )
+
+(define (map op @)
+    (define (map1 items)
+        (cond
+            ((null? items) nil)
+            (else (cons (op (car items)) (map1 (cdr items))))
+            )
+        )
+    (define (iter items)
+        (cond
+            ((null? (car items)) nil)
+            (else (cons (apply op (map car items)) (iter (map cdr items))))
+            )
+        )
+    (cond
+        ((= (length @) 1) (map1 (car @)))
+        (else (iter @))
+        )
+    )
+(define integer int)
+(define (abs x) (if (< x 0) (- x) x))
+(define (even? n) (= (% n 2) 0))
+(define (odd? n) (= (% n 2) 1))
+(define (integer? x) (eq? (type x) 'INTEGER))
+(define (real? x) (eq? (type x) 'REAL))
+(define (number? x) (or (integer? x) (real? x)))
+(define (string? x) (or (null? x) (eq? (type x) 'STRING)))
+(define (symbol? x) (eq? (type x) 'SYMBOL))
+(define (array? x) (eq? (type x) 'ARRAY))
+(define (true? x) x)
+(define (false? x) (not x))
+(define (literal? x)
+    (or (null? x) (eq? x #t) (eq? x #f) (string? x) (array? x)
+        (integer? x) (real? x) (and (pair? x) (eq? (car x) 'quote))))
+(define (atom? x) (not (or (pair? x) (string? x) (array? x))))
+(define (car-cdr items @)
+    (while (valid? @)
+        (cond
+            ((= (car @) 0) (set 'items (car items)))
+            (else (set 'items (cdr items)))
+            )
+        (set '@ (cdr @))
+        )
+    items
+    )
+
+(define (caar x) (car-cdr x 0 0))
+(define (cadr x) (car-cdr x 1 0))
+(define (caddr x) (car-cdr x 1 1 0))
+(define (cadddr x) (car-cdr x 1 1 1 0))
+(define (caddddr x) (car-cdr x 1 1 1 1 0))
+(define (cadddddr x) (car-cdr x 1 1 1 1 1 0))
+
+(define (cddr x) (cdr (cdr x)))
+(define (cddr x) (car-cdr x 1 1))
+(define (cdddr x) (car-cdr x 1 1 1))
+(define (cddddr x) (car-cdr x 1 1 1 1))
+(define (cdddddr x) (car-cdr x 1 1 1 1 1))
+
+(define (equal? a b)
+    (cond
+        ((null? a)
+            ;(println "returning" (null? b))
+            (null? b))
+        ((pair? a)
+            ;(println "pair returning "
+            ;(and (pair? b) (equal? (car a) (car b)) (equal? (cdr a) (cdr b))))
+            (and (pair? b) (equal? (car a) (car b)) (equal? (cdr a) (cdr b))))
+        ((string? a)
+            (string-equal? a b))
+        ((array? a)
+            (array-equal? a b))
+        (else
+            ;(println "else returning "(eq? a b))
+            (eq? a b))
+        )
+    )
+
+(define string=? string-equal?)
+
+(define (array-equal? a b)
+    (cond
+        ((null? a) (null? b))
+        ((null? b) #f)
+        (else (and (equal? (car a) (car b)) (array-equal? (cdr a) (cdr b))))
+        )
+    )
+
+(define (string-compare a b)
+    (cond
+        ((and (null? a) (null? b)) 0)
+        ((null? a) (- 0 (ascii (getElement b 0))))
+        ((null? b) (ascii (getElement a 0)))
+        (else
+            (if (== (ascii (getElement a 0)) (ascii (getElement b 0)))
+                (string-compare (cdr a) (cdr b))
+                (- (ascii (getElement a 0)) (ascii (getElement b 0)))
+                )
+            )
+        )
+    )
+
+(define (sqrt x) (expt x 0.5))
+
+(define (stream-car s) (car s))
+
+(define (stream-cdr s)
+    (define scdr (cdr s))
+    (define scddr (cdr scdr))
+    (cond
+        ((null? (car scddr)) (car scdr))
+        (else
+            (set-car! scdr (apply eval scdr))
+            (set-car! scddr nil)
+            (car scdr)
+            )
+        )
+    )
+;(define (stream-cdr s) (apply eval (cdr s)))   ; non-memoizing
+    
+(define (cons-stream # a $b) (list a $b #))
+
+(define (stream-null? s) (null? s))
+
+(define (code $s) $s)
+
+(define (member? x items)
+    (valid? (member x items))
+    )
+
+(define (member x items)
+    (cond
+        ((null? items)
+            nil
+            )
+        ((and (object? x) (eq? x (car items)))
+            items
+            )
+        ((object? x)
+            (member x (cdr items))
+            )
+        ((equal? x (car items))
+            items
+            )
+        (else
+            (member x (cdr items))
+            )
+        )
+    )
+
+(define (nequal? a b) (not (equal? a b)))
+
+(define (getElement items @)
+    (define __getElement (get 'getElement (get '__context __context)))
+    (while (valid? @)
+        ;(inspect items)
+        (set 'items (__getElement items (car @)))
+        (set '@ (cdr @))
+        )
+    items
+    )
+
+(define __string+ string+)
+(define (string+ str @)
+    (while (valid? @)
+        (cond
+            ((null? (car @))
+                'do-nothing)
+            ((string? (car @))
+                (set 'str (__string+ str (car @))))
+            (else
+                (set 'str (__string+ str (string (car @)))))
+            )
+        (set '@ (cdr @))
+        )
+    str
+    )
+
+(define __string string)
+(define (string x)
+    (cond
+        ((pair? x) (list-to-string x))
+        (else (__string x))
+        )
+    )
+(define (list-to-string x)
+    (define (iter z)
+        (cond
+            ((null? (cdr z))
+                (string+ (string (car z)) ")")
+                )
+            ((pair? (cdr z))
+                (string+ (string (car z)) " " (iter (cdr z)))
+                )
+            (else
+                (string+ (string (car z)) " . " (string (cdr z)) ")")
+                )
+            )
+        )
+    (cond
+        ((thunk? x) (string+ "<thunk " (address x) ">"))
+        ((closure? x) (string+ "<closure " (address x) ">"))
+        ((error? x) (string+ "<error " (address x) ">"))
+        ((environment? x) (string+ "<environment " (address x) ">"))
+        ((object? x) (string+ "<object " (address x) ">"))
+        (else (string+ "(" (iter x)))
+        )
+    )
+
+(define (thunk code environment) (define memo #f) this)
+(define (thunk? item) (is? item 'thunk))
+(define (force item) (eval (get 'code item) (get 'environment item)))
+
+(define (assoc x y)
+    (cond
+        ((null? y) #f)
+        ((equal? x (caar y)) (car y))
+        (else (assoc x (cdr y)))
+        )
+    )
+
+(define (make-assoc xs ys)
+    (cond
+        ((null? xs) nil)
+        (else (cons (list (car xs) (car ys)) (make-assoc (cdr xs) (cdr ys))))
+        )
+    )
+
+(define (local? id env)
+    (member? id (localNames env))
+    )
+(define (localNames env)
+    (cadr env)
+    )
+(define (localValues env)
+    (caddr env)
+    )
+(define (defined? id env)
+    (not (error? (catch (eval id env))))
+    )
+(define (dot obj $name)
+    (get $name obj)
+    )
+;(define (prettyStatement s indent)
+;    (print indent s)
+;    )
+(define (builtinFunctions)
+    (define vars (cadr __builtin))
+    (define vals (caddr __builtin))
+    (println "-----Builtin Functions-----")
+    (while (valid? vars)
+        (if (neq? (car (string (car vars))) "_")
+            (if (builtin? (car vals))
+                (println "    " (car vals))
+                )
+            )
+        (set! vars (cdr vars))
+        (set! vals (cdr vals))
+        )
+    )
+(define (mainLibraryFunctions)
+    (define vars (cadr __main-lib))
+    (define vals (caddr __main-lib))
+    (println "-----Main Library Functions-----")
+    (while (valid? vars)
+        (if (neq? (car (string (car vars))) "_")
+            (if (closure? (car vals))
+                (println "    " (car vals))
+                )
+            )
+        (set! vars (cdr vars))
+        (set! vals (cdr vals))
+        )
+    )
+
+(define (switch # test $)
+    (while (valid? $)
+        (define case (car $))
+        (if (and (pair? case) (= (length case) 2))
+            (if (or (eq? (car case) 'else) (eq? test (eval (car case) #)))
+                (return (eval (cadr case) #))
+                )
+            (throw 'switchException 
+                (string+ "malformed case -> " (string case)))
+            )
+        (set! $ (cdr $))
+        )
+    )
+;{
+
+(define x 0)
+(set! x 2)
+(inspect x)
+(inspect (get 'assoc this))
+(for-all x '(1 2 3 4)
+    (inspect x)
+    )
+(inspect (cadr '(1 2 3)))
+(inspect (caddr '(1 2 3)))
+(inspect (cdddr '(1 2 3)))
+(mainLibraryFunctions)
+(builtinFunctions)
+;}

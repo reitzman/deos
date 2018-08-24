@@ -1,0 +1,15 @@
+;function print(@)
+;    {
+;    while (valid?(@))
+;        {
+;        display(car(@));
+;        @ = cdr(@);
+;        }
+;    :print-done;
+;    }
+
+;function println(@)
+;    {
+;    apply(print,@);
+;    print("\n");
+;    }

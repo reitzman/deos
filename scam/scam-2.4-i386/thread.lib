@@ -1,0 +1,119 @@
+; thread.lib
+; author: Gabriel Loewen
+; sub-author: Jeffrey Robinson
+
+; execute a number of expressions iteratively (non-threaded)
+(define (pexecute* # $)
+   (while (not (nil? $))
+      (eval (car $) #)
+      (set! $ (cdr $))
+      )
+   )
+
+; execute a number of expressions in separate threads
+(define (pexecute # $)
+   (define tids nil)
+   (define (exec lst)
+      (if (not (nil? lst))
+         (begin
+            (set! tids (cons (thread (eval (car lst) #)) tids))
+            (exec (cdr lst))
+            )
+         )
+      )
+   (exec $)
+   (while (not (nil? tids))
+      (tjoin (car tids))
+      (set! tids (cdr tids))
+      )
+   (define tErr (getThreadError))
+   (if (> tErr -1)
+     (throw 'UnknownThreadException (string+ "There was an error in thread " (string tErr) ", re-run with pexecute* to get the error"))
+     )
+   )
+
+; user defined thread pool object
+;   cnt -- number of threads to place in the pool
+(define (tpool cnt)
+   (define ending #f)     ; shutdown flag for threads
+   (define queue nil)     ; queue of expressions and environments
+   (define threads nil)   ; list of threads
+
+   (define workingThreads 0)
+   (define waitingThreads 0)
+
+   (define (empty?) (nil? queue))
+
+   ; push a job to the queue
+   (define (push # $ex @)
+      (if (eq? ending #t) (return 'done))
+      (lock)
+      (set! queue (append queue (list (list $ex # @))))
+      (set! waitingThreads (+ waitingThreads 1))
+      (unlock)
+      )
+   
+   ; special push, change calling environment
+   (define (push* env $ex @)
+      (if (eq? ending #t) (return 'done))
+      (lock)
+      (set! queue (append queue (list (list $ex env))))
+      (set! waitingThreads (+ waitingThreads 1))
+      (unlock)
+      )
+
+   ; wait for the current queue of jobs completes before allowing other jobs in
+   (define (join)
+      (while (not (empty?))
+         (nanosleep 1000000) ; sleep 0.001 seconds
+         )
+      )
+
+   ; waits for jobs to be available and then executes them
+   (define (worker)
+      (while #t
+         (lock)
+         (if (not (nil? queue)) 
+            (begin
+               (define item (car queue))
+               (set! queue (cdr queue))
+               (set! workingThreads (+ workingThreads 1))
+               (set! waitingThreads (- waitingThreads 1))
+               (unlock)
+
+               (define job (car item))
+               (define env (cadr item))
+               (define callbacks (caddr item))
+               (define res (eval job env))
+
+               ; if any callbacks were pushed, call them!
+               (while (not (nil? callbacks))
+                  ((car callbacks) res)
+                  (set! callbacks (cdr callbacks))
+                  )
+
+               (lock)
+               (set! workingThreads (- workingThreads 1))
+               (set! waitingThreads (+ waitingThreads 1))
+               )
+            )
+         (unlock)
+         (if (eq? ending #t) (return 'done))
+         (nanosleep 1000000) ; sleep 0.001 seconds
+         )
+      )
+
+   ; wait for all jobs to finish and then shutdown
+   (define (shutdown)
+      (while (not (empty?))
+         (nanosleep 1000000)
+         )
+      (set! ending #t)
+      )
+
+   (while (> cnt 0)
+      (set! threads (cons (thread (worker)) threads))
+      (set! cnt (- cnt 1))
+      )
+   this
+   )

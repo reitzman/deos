@@ -1,0 +1,64 @@
+; Java style inheritance in three functions (really two, super is not needed)
+; linear time
+(include "reflection.lib")
+
+(define (resetClosures static obj)
+    ;(println "reifying " obj " to " static)
+    (define (update current rest)
+        (if (closure? current)
+            (begin
+                ;(println "setting context of " (current 'name) " to " static)
+                (set '__context static current))
+                )
+        (if (valid? rest) (update (car rest) (cdr rest)))
+        )
+    (define values (cdr (cdr (cdr (cdr (cdr (localValues obj)))))))
+    ;(println "locals are " values)
+    (if (!= values nil) (update (car values) (cdr values)))
+    obj
+    )
+
+(define (inherit child parents reification static)
+    ;(println "inherit " (list child parents reification static) "...")
+    (if (null? parents)
+        (set '__context static child)
+        (set '__context
+              (inherit (resetClosures reification (car parents))
+                       (cdr parents) reification static)
+              child
+              )
+        )
+    (if (valid? (child '__constructor))
+        (set '__label (child '__constructor 'name) child)
+        )
+    child
+    )
+
+(define (new child)
+    ;(println "new...")
+    (define (chain x) (if (null? x) nil (cons x (chain (x 'parent)))))
+    (inherit child (chain (child 'parent)) child (child '__context))
+    )
+
+(define (mixin object @)
+    (inherit object @ object (object '__context))
+    )
+
+(define (super child)
+    (child '__context)
+    )
+
+(define (extend # parent)
+    (define top
+        (if (local? 'inherit-top parent) (parent 'inherit-top) parent))
+    
+    ;(println "in extend...")
+    (addSymbol 'inherit-top top #)
+    
+    (set '__context (# '__context) top)
+    (set '__context parent #)
+    #
+    )
+
+(define (setEnclosingScope a b) (set* a '__context b))
+(define (getEnclosingScope a) (a '__context))

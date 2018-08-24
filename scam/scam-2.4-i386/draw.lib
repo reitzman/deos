@@ -1,0 +1,368 @@
+(define imageName 0)
+(define xLocation 0)
+(define yLocation 0)
+(define arrowStyle 'forward)
+(define flipLabel #f)
+(define scaleBy 1.0)
+(define arrowheadSize 1)
+(define maxX 0)
+(define maxY 0)
+(define topBorderAmt 0.75)
+(define rightBorderAmt 0.75)
+(define defaultColor 'black)
+(define defaultLineWidth 0.70)
+(define arrowheadAdjust 0.05)
+
+(define commands nil)
+
+(define (number? x)
+    (or
+        (eq? (type x) 'INTEGER)
+        (eq? (type x) 'REAL)
+        )
+    )
+
+
+(define (image fileName @)
+    (if (and (valid? @) (valid? (tail @)) (eq? (getElement @ 0) 'scale))
+        (set! scaleBy (real (getElement @ 1)))
+        )
+    (set! imageName string(fileName);
+    (set! maxX 0;
+    (set! maxY 0;
+    (set! commands nil;
+    linewidth(defaultLineWidth);
+    color(defaultColor);
+    }
+
+(define (draw(@)
+    {
+    inspect(imageName);
+    (define port open(imageName + ".pgf" 'write))
+    (define jpg? member?('jpg @))
+    (define png? member?('png @))
+    (define pdf? member?('pdf @))
+    (define display? member?('display @))
+
+    setPort(port);
+    println("\\begin{pgfpicture}{0cm}{0cm}"
+        + "{" + (maxX + rightBorderAmt * scaleBy)
+        + "cm}{" + (maxY + topBorderAmt * scaleBy)  + "cm}");
+    println("\\begin{pgfmagnify}{",scaleBy,"}{",scaleBy,"}");
+    println("% default values:");
+    while (commands != nil)
+        {
+        println(head(commands));
+        (set! commands tail(commands);
+        }
+    println("\\end{pgfmagnify}");
+    println("\\end{pgfpicture}");
+    close(port);
+    setPort('stdout);
+
+    convertImage(pdf? jpg? png? display?);
+    }
+
+(define (topBorder(amt)
+    { (define old topBorderAmt) (set! topBorderAmt amt; old; }
+(define (rightBorder(amt)
+    { (define old rightBorderAmt) (set! rightBorderAmt amt; old; }
+
+(define (convertImage(pdf? jpg? png? display?)
+    {
+    (define port)
+
+    if (not(pdf?) && not(jpg?) && not(png?) && not(display?) return nil);
+    
+    (set! port open(imageName + ".tex" 'write);
+    setPort(port);
+    println("\\documentclass{article}");
+    println("\\usepackage[compact]{titlesec}");
+    println("\\usepackage[margin=0in]{geometry}");
+    println("\\usepackage{pgf}");
+    println("");
+    println("\\begin{document}");
+    println("\\thispagestyle{empty}");
+    println("\\input{" + imageName + ".pgf}");
+    println("\\end{document}");
+    close(port);
+    setPort('stdout);
+    println("displaying " + imageName + ".png...");
+    system("pdflatex " + imageName + ".tex");
+    if (png?)
+        {
+        system("convert -scale 50% -density 300 -crop "
+            + (maxX + rightBorderAmt * 60 * scaleBy) + "x"
+            + (maxY + topBorderAmt * 60 * scaleBy) + "+32+0 "
+            + imageName + ".pdf " + imageName + ".png");
+        }
+    if (jpg? || (not(png?) && display?))
+        {
+        system("convert -scale 50% -density 300 -crop "
+            + (maxX + rightBorderAmt * 60 * scaleBy) + "x"
+            + (maxY + topBorderAmt * 60 * scaleBy) + "+32+0 "
+            + imageName + ".pdf " + imageName + ".jpg");
+        }
+    if (display? && png?)
+        {
+        system("display " + imageName + ".png");
+        }
+    else if (display?)
+        {
+        system("display " + imageName + ".jpg");
+        }
+    }
+
+(define (color(color)
+    {
+    (define old defaultColor)
+    (set! defaultColor color;
+    command("\\color{",color,"}");
+    return old;
+    }
+
+(define (linewidth(width)
+    {
+    (define old defaultLineWidth)
+    (set! defaultLineWidth width;
+    command("\\pgfsetlinewidth{",width,"pt}");
+    return old;
+    }
+
+(define (beginTranslate(x y)
+    {
+    command("\\begin{pgftranslate}{\\pgfpoint{",x,"cm}{",y,"cm}}");
+    (set! xLocation 0;
+    (set! yLocation 0;
+    }
+
+(define (endTranslate()
+    {
+    command("\\end{pgftranslate}");
+    }
+
+(define (beginRotate(angle)
+    {
+    command("\\begin{pgfrotateby}{\\pgfdegree{",angle,"}}");
+    }
+
+(define (endRotate()
+    {
+    command("\\end{pgfrotateby}");
+    }
+
+(define (scale(amt)
+    {
+    (set! scaleBy amt;
+    }
+
+(define (label(str hori verti)
+    {
+    (define originalX xLocation) (define originalY yLocation)
+
+    beginTranslate(xLocation yLocation);
+    if (flipLabel beginRotate(180));
+    command("\\pgfputat{"
+        + "\\pgfxy(0,0)}"
+        + "{\\pgfbox[",hori,",",verti,"]"
+        + "{",str,"}}"
+        );
+    if (flipLabel endRotate());
+    endTranslate();
+
+    move(originalX originalY);
+    }
+
+(define (labelxy(x y str hori verti)
+    {
+    (define originalX xLocation) (define originalY yLocation)
+
+    move(x y);
+    label(str hori verti);
+    move(originalX originalY);
+    }
+
+(define (move(x y)
+    {
+    (set! xLocation x;
+    (set! yLocation y;
+    (if (< maxX xLocation) (set! maxX xLocation))
+    (if (< maxY yLocation) (set! maxY yLocation))
+    command("% moving to (",x,",",y,") ");
+    command("\\pgfmoveto(\\pgfxy(",x,",",y,"))");
+    }
+
+(define (moveBy(x y)
+    {
+    command("% shifting from (",xLocation,",",yLocation,") ");
+    xLocation += x;
+    yLocation += y;
+    (if (< maxX xLocation) (set! maxX xLocation))
+    (if (< maxY yLocation) (set! maxY yLocation))
+    command("% to (",xLocation,",",yLocation,")");
+    command("\\pgfmoveto(\\pgfxy(",xLocation,",",yLocation,"))");
+    }
+
+(define shift moveBy)
+
+(define (setArrowheadSize(x)
+    {
+    (define old arrowheadSize)
+    (set! arrowheadSize x)
+    old;
+    }
+
+(define (getArrowheadSize()
+    {
+    arrowheadSize;
+    }
+
+(define (arrow(x y X Y)
+    {
+    if (arrowStyle == 'forward || arrowStyle == 'double)
+        {
+        command("\\pgfsetendarrow{\\pgfarrowsingle}");
+        }
+    if (arrowStyle == 'reverse || arrowStyle == 'double)
+        {
+        command("\\pgfsetstartarrow{\\pgfarrowsingle}");
+        }
+
+    /* need to take care of bug in pgfarrow, arrowhead is too long */
+
+    line(x y X Y);
+
+    command("\\pgfclearendarrow");
+    command("\\pgfclearstartarrow");
+    }
+
+(define (arrowTo(x y)
+    {
+    command("% arrowTo");
+    arrow(xLocation yLocation x y);
+    }
+
+(define (arrowBy(deltaX deltaY)
+    {
+    command("% arrowBy");
+    arrow(xLocation yLocation (+ xLocation deltaX) (+ yLocation deltaY))
+    }
+
+(define (line(x y X Y)
+    {
+    command("% drawing a line from (",x,",",y,") to (",X,",",Y,") ");
+    command("\\pgfline{"
+        + "\\pgfxy(",x,",",y,")}"
+        + "{\\pgfxy(",X,",",Y,")}");
+    move(X Y);
+    }
+
+(define (lineTo(x y)
+    {
+    command("% lineTo");
+    line(xLocation yLocation x y);
+    }
+
+(define (lineBy(x y)
+    {
+    command("% lineBy");
+    (line xLocation yLocation (+ xLocation x) (+ yLocation y))
+    }
+
+(define (curveTo(x1 y1 x2 y2 x3 y3)
+    {
+    move(xLocation yLocation);
+    command("\\pgfcurveto"
+        + "{\\pgfxy(" + x1 + "," + y1 +  ")}" 
+        + "{\\pgfxy(" + x2 + "," + y2 +  ")}" 
+        + "{\\pgfxy(" + x3 + "," + y3 +  ")}" 
+        );
+    command("\\pgfstroke");
+    move(x3 y3);
+    }
+
+(define (curveBy(dx1 dy1 dx2 dy2 dx3 dy3)
+    {
+    (define x1 xLocation + dx1)
+    (define y1 yLocation + dy1)
+    (define x2 x1 + dx2)
+    (define y2 y1 + dy2)
+    (define x3 x2 + dx3)
+    (define y3 y2 + dy3)
+    curveTo(x1 y1 x2 y2 x3 y3);
+    }
+
+(define (circle(style size)
+    {
+    command("\\pgfcircle[",style,"]{\\pgfxy(",xLocation,",",yLocation,")}{",size,"cm}");
+    (if (< maxX (+ xLocation size)) (set! maxX (+ xLocation size)))
+    (if (< maxY (+ yLocation size)) (set! maxY (+ yLocation size)))
+    }
+
+(define (rectangle(style width height)
+    {
+    command("\\pgfrect[",style,"]",
+        "{\\pgfxy(",xLocation,",",yLocation,")}",
+        "{\\pgfxy(",width,",",height,")}"
+        );
+    (if (< maxX (+ xLocation width)) (set! maxX (+ xLocation width)))
+    (if (< maxY (+ yLocation height)) (set! maxY (+ yLocation height)))
+    }
+
+(define (lineBy(x y)
+    {
+    lineTo((+ xLocation + x (+ yLocation + y);
+    }
+
+(define (command(@)
+    {
+    (define str "")
+    while (@ != nil)
+        {
+        (set! str (+ str + head(@);
+        (set! @ tail(@);
+        }
+
+    (set! commands (+ commands + list(str);
+    }
+
+(define (getRotation(direction)
+    {
+    if (direction == 'up return 90);
+    if (direction == 'down return -90);
+    if (direction == 'left return 180);
+    if (direction == 'right return 0);
+    if (direction == 'up-right return 45);
+    if (direction == 'up-left return 135);
+    if (direction == 'down-right return -45);
+    if (direction == 'down-left return -135);
+    0;
+    }
+
+(define (vertical?(dir)
+    {
+    member?(dir list('up 'down));
+    }
+
+(define (horizontal?(dir)
+    {
+    member?(dir list('left 'right));
+    }
+
+(define (diagonal?(dir)
+    {
+    member?(dir list('up-left 'up-right 'down-left 'down-right));
+    }
+
+if (#t)
+    {
+    image("a");
+    move(2 2);
+    circle('fill 1);
+    moveBy(2 2);
+    rectangle('stroke 1 2);
+    moveBy(2 0);
+    rectangle('fillstroke 1 2);
+    draw('display);
+    }
+

@@ -1,0 +1,38 @@
+function repl()
+    {
+    var e = nil;
+    var result = nil;
+    e = catch(readExpr());
+    while (e != 'quit && e != 'q)
+        {
+        if (error?(e) && get('code,e) == 'emptyExpression)
+            {
+            println();
+            return 'done;
+            }
+        else if (error?(e))
+            {
+            println("EXCEPTION: ",get('code,e),",",
+                suffix(get('value,e),1 + stringUntil(get('value,e),":")));
+            }
+        else
+            {
+            result = catch(eval(e,this));
+            if (error?(result))
+                {
+                println("EXCEPTION: ",get('code,result),",",
+                    suffix(get('value,result),1 + stringUntil(get('value,result),":")));
+                }
+            else
+                { 
+                println(result);
+                }
+            }
+        e = catch(readExpr());
+        }
+    }
+
+print("Welcome to the Sway Interpreter!");
+println(" To exit, enter <Ctl>-D, q;, or quit;");
+repl();
+println("Happy happy, joy joy!");

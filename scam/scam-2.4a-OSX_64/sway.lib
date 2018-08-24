@@ -1,0 +1,343 @@
+var SwayEnv = ScamEnv;
+var null = nil;
+function paren(expr) { expr; }
+function &&(#,$x,$y) { if (eval($x,#),eval($y,#),#f); }
+function ||(#,$x,$y) { if (eval($x,#),#t,eval($y,#)); }
+function .(x,$y) { get($y,x); }
+function +(a,b)
+    {
+    var + = __context . __context . +;
+    if (type(a) == 'STRING,
+        a string+ string(b),
+        if (null?(a),
+            string(b),
+            a + b));
+    }
+function inspect(#,$item)
+    {
+    var r = catch(eval($item,#));
+    pretty($item,"");
+    print(" is ");
+    pretty(r);
+    println();
+    r;
+    }
+function =(#,$a,b)
+    {
+    if (symbol?($a))
+        {
+        set($a,b,#);
+        }
+    else if (list?($a) && car($a) == '.)
+        {
+        set(caddr($a),b,eval(cadr($a),#));
+        }
+    else
+        {
+        throw('assignmentException,string+("cannot assign to ",string($a)));
+        }
+    }
+
+// Java style inheritance in three functions (really two, super is not needed)
+// linear time
+
+function __resetClosures(static,obj)
+    {
+    function update(current,rest)
+        {
+        if (closure?(current))
+            {
+            //println("setting context of ",current," to ",static);
+            set('__context,static,current);
+            }
+        if (rest != nil) { update(car(rest),cdr(rest)); }
+        }
+    var values = cdr(cdr(cdr(cdr(cdr(localValues(obj))))));
+    //println("locals are ",values);
+    if (values != nil) { update(car(values),cdr(values)); }
+    obj;
+    }
+function __inherit(child,parents,reification,static)
+    {
+    if (null?(parents))
+        {
+        set('__context,static,child);
+        }
+    else
+        {
+        set('__context ,
+                __inherit(__resetClosures(reification,car(parents)),
+                       cdr(parents),reification,static),
+                child);
+        }
+    child;
+    }
+function new(child)
+    {
+    function chain(x) { if (null?(x),nil,cons(x,chain(get('parent,x)))); }
+    __inherit(child,chain(get('parent,child)),child,get('__context,child));
+    }
+function super(child)
+    {
+    get('__context,child);
+    }
+function extend(#,parent)
+    {
+    var top = 
+        if(local?('__inherit-top,parent),get('__inherit-top,parent),parent);
+    
+    //println("in extend...");
+    addSymbol('__inherit-top,top,#);
+    
+    set('__context,get('__context,#),top);
+    set('__context,parent,#);
+    #;
+    }
+function mixin(object,@)
+    {
+    __inherit(object,@,object,get('__context,object));
+    }
+
+var __pretty-indent = "    ";
+
+function pretty(expr,@)
+    {
+    function closure(expr,indent)
+        {
+        print(indent,"function ",expr . name);
+        prettyArgs(get('parameters,expr));
+        print("\n");
+        prettyBlock(get('code,expr),string+(indent,__pretty-indent));
+        }
+    var indent = if(valid?(@),car(@),"");
+    if (closure?(expr))
+        {
+        closure(expr,indent);
+        }
+    else if (object?(expr))
+        {
+        ppTable(expr);
+        }
+    else
+        {
+        prettyExpression(expr);
+        }
+    }
+    
+function prettyStatement(item,indent)
+    {
+    var xtype;
+    //inspect(item);
+    if (list?(item))
+        {
+        if (car(item) == 'define)
+            {
+            prettyDefinition(item,indent);
+            }
+        else if (car(item) == 'begin) // multiple definition
+            {
+            prettyDefinition(item,indent);
+            }
+        else if ((xtype = xcall?(item)) > 0)
+            {
+            prettyXCall(item,indent,indent,xtype);
+            }
+        else if (car(item) == 'while)
+            {
+            prettyLoop(item,1,indent,indent);
+            }
+        else if (car(item) == 'for-all)
+            {
+            prettyLoop(item,2,indent,indent);
+            }
+        else if (car(item) == 'for)
+            {
+            prettyLoop(item,3,indent,indent);
+            }
+        else 
+            {
+            print(indent);
+            prettyExpression(item);
+            println(";");
+            }
+        }
+    else
+        {
+        println(indent,item,";");
+        }
+    }
+function prettyDefinition(expr,indent)
+    {
+    function vardef(item)
+        {
+        print(car(item));
+        if (valid?(cdr(item)))
+            {
+            print(" = ");
+            prettyExpression(cadr(item));
+            }
+        }
+    if (car(expr) == 'begin) //multiple variable definition
+        {
+        print(indent,"var ");
+        expr = cdr(expr);
+        while (expr != null)
+            {
+            var item = car(expr);
+            vardef(cdr(item));
+            if (valid?(cdr(expr)))
+                {
+                print(",");
+                }
+            expr = cdr(expr);
+            }
+        println(";");
+        }
+    else if (list?(cadr(expr))) // function definition
+        {
+        print(indent,"function ",car(cadr(expr)));
+        prettyArgs(cdr(cadr(expr)));
+        prettyBlock(cdr(expr),string+(indent,__pretty-indent));
+        }
+    else
+        {
+        print(indent,"var ");
+        vardef(cdr(expr));
+        println(";");
+        }
+    }
+function prettyArgs(a)
+    {
+    print("(");
+    while (a != null)
+        {
+        prettyExpression(car(a));
+        a = cdr(a);
+        if (a != null,print(","));
+        }
+    print(")");
+    }
+function prettyExpression(item)
+    {
+    if (null?(item))
+        {
+        print("null");
+        }
+    else if (string?(item))
+        {
+        var ch;
+        print("\"");
+        while (item != null)
+            {
+            ch = if(car(item) string-equal? "\n","\\n",
+                    if(car(item) string-equal? "\t","\\t",
+                        car(item)));
+            print(ch);
+            item = cdr(item);
+            }
+        print("\"");
+        }
+    else if (atom?(item))
+        {
+        print(item);
+        }
+    else if (length(item) == 3 && symbol?(car(item)) && length(car(item)) <= 2)
+        {
+        prettyExpression(cadr(item));
+        print(" ");
+        prettyExpression(car(item));
+        print(" ");
+        prettyExpression(caddr(item));
+        }
+    else
+        {
+        prettyExpression(car(item));
+        prettyArgs(cdr(item));
+        }
+    }
+function prettyBlock(expr,indent)
+    {
+    function statements(expr,indent)
+        {
+        while (expr != null)
+            {
+            prettyStatement(car(expr),indent);
+            expr = cdr(expr);
+            }
+        }
+    print(indent,"{\n");
+    statements(cdr(expr),indent);
+    print(indent,"}\n");
+    }
+function prettyXCall(expr,indent1,indent2,xtype)
+    {
+    var args,count;
+    print(indent1,car(expr)," (");
+    args = cdr(expr);
+    count = length(args) - if(xtype > 1,2,1);
+    while (count > 0)
+        {
+        prettyExpression(car(args));
+        args = cdr(args);
+        count -= 1;
+        if (count > 0,print(","));
+        }
+    print(")\n");
+    prettyBlock(car(args),indent2 string+ __pretty-indent);
+    if (xtype == 2)
+        {
+        println(indent2,"else");
+        prettyBlock(cadr(args),indent2 string+ __pretty-indent);
+        }
+    else if (xtype == 3)
+        {
+        print(indent2,"else ");
+        prettyXCall(cadr(args),"",indent2,xcall?(cadr(args)));
+        }
+    }
+function prettyLoop(item,count,indent1,indent2)
+    {
+    print(indent1,car(item)," (");
+    while (count > 1)
+        {
+        prettyExpression(cadr(item));
+        print(",");
+        item = cdr(item);
+        count -= 1;
+        }
+    prettyExpression(cadr(item));
+    print(")\n");
+    prettyBlock(cdr(item),indent2 string+ __pretty-indent);
+    }
+function prettyFor(item,indent1,indent2)
+    {
+    print(indent1,"for (");
+    prettyExpression(cadr(item));
+    print(",");
+    prettyExpression(caddr(item));
+    print(",");
+    prettyExpression(cadddr(item));
+    print(")\n");
+    prettyBlock(cdddr(item),indent2 string+ __pretty-indent);
+    }
+function xcall?(item)
+    {
+    while (item != null)
+        {
+        if (block?(car(item)))
+            {
+            if (null?(cdr(item)),return 1);
+            if (null?(cddr(item)))
+                {
+                if (block?(cadr(item)),return 2);
+                if (xcall?(cadr(item)),return 3);
+                }
+            }
+        item = cdr(item);
+        }
+    return 0;
+    }
+function block?(expr)
+    {
+    list?(expr) && (car(expr) == 'scope || car(expr) == 'begin);
+    }

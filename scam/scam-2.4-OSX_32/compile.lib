@@ -1,0 +1,233 @@
+(define else #t) 
+
+; mini parser for alpha-substitution
+; todo! handle function call to scope
+
+; helper: extend the name env, binding original names to themselves
+
+(define (rewrite expr names free)
+    ; dispatch function for generic definitions
+
+    (define (rewrite-definition expr names free)
+        (if (symbol? (car (cdr expr)))
+            (rewrite-variable-definition (car (cdr expr)) expr names free)
+            (rewrite-function-definition (car (cdr expr)) expr names free)
+            )
+        )
+    ; rewrite a function definition
+
+    (define (rewrite-function-definition sig expr names free)
+        ;(println "rewrite-function-definition: sig: " sig " expr: " expr " name: " names)
+        (define id (car sig))
+        (define newid (rewrite-identifier id names))
+        ; extend the name environment
+        (define next (cons (make-assoc (cdr sig) (cdr sig)) names))
+        ; add function name to name environment
+        (cons (rewrite 'define names free)
+            (cons (cons newid (rewrite (cdr sig) next free))
+                (rewrite (cddr expr) next free)))
+        )
+
+
+    (define (rewrite-scope expr names free)
+        ;(println "rewrite-scope: expr: " expr " name: " names)
+        (cons (rewrite 'scope names free)
+            (rewrite
+                (cdr expr)
+                (cons (make-assoc nil nil) names)       ;extend
+                free))
+        )
+
+    ; helper: transform a local identifier to a mangled name
+
+    (define (rewrite-identifier id names)
+        (cond
+            ((gensym? id) id)
+            ((neq? (assoc id (car names)) #f)
+                (cadr (assoc id (car names))))
+            (else
+                (rewrite-add-identifier id (gensym id) names))
+            )
+        )
+
+    ; helper: add a mangled identifier name to
+    ;         the list of names in the current scope
+
+    (define (rewrite-add-identifier old new names)
+        (set-car! names (cons (list old new) (car names)))
+        new
+        )
+
+    ; rewrite a variable definition
+
+    (define (rewrite-variable-definition id expr names free)
+        ;(println "rewrite-variable-definition: id: " id " expr: " expr " name: " names)
+        (define newid (rewrite-identifier id names))
+
+        ; add the identifier to names
+        (cons (rewrite 'define  names free)
+            (cons newid 
+                (rewrite (cddr expr) names free)))
+        )
+
+    ; look up bindings in the name env ;   free variables
+
+    (define (rewrite-get id names free)
+        (define value)
+        ;(println "rewrite-get: id: " id " name: " names)
+        (cond
+            ((gensym? id) id)
+            ((null? names)
+                (if (not (defined? id free))
+                    id
+                    (begin
+                        (define value (get id free))
+                        (if (closure? value)
+                            value
+                            (if (builtin? value)
+                                value
+                                id
+                                )
+                            )
+                        )
+                    )
+                )
+            (else
+                (define target (assoc id (car names)))
+                (if (neq? target #f)
+                    (car (cdr target))    ;bound variable
+                    (rewrite-get id (cdr names) free)
+                    )
+                )
+            )
+        )
+
+    ;
+    ;(println "rewrite: expr: " expr " names: " names)
+    (cond
+        ((null? expr) expr)
+        ((eq? expr #t) expr)
+        ((eq? expr #f) expr)
+        ((eq? (type expr) 'STRING) expr)
+        ((eq? (type expr) 'ARRAY) expr)
+        ((eq? (type expr) 'INTEGER) expr)
+        ((eq? (type expr) 'REAL) expr)
+        ((if (pair? expr) (eq? (car expr) 'quote)) expr)
+        ((eq? (type expr) 'SYMBOL) (rewrite-get expr names free))
+        ((eq? (car expr) 'define) (rewrite-definition expr names free))
+        ((eq? (car expr) 'scope) (rewrite-scope expr names free))
+        ((eq? (car expr) 'environment) expr)
+        (else
+            (cons
+                (rewrite (car expr) names free)
+                (rewrite (cdr expr) names free)
+                )
+            )
+        )
+    )
+
+; compilation and macro functions ;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (compile # f @)
+    (define env (if (valid? @) (car @) #))
+    ;(pp f)
+    (set 'code
+        (rewrite 
+            (get 'code f) 
+            ; extend
+            (cons (make-assoc (get 'parameters f) (get 'parameters f)) nil)
+            env
+            )
+        f) 
+    ;(pp (dot f code))
+    f
+    )
+
+(define (compile-env # @)
+    (define env (if (valid? @) (car @) #))
+    (define vars (car (cdr env)))
+    (define vals (car (cdr (cdr env))))
+    (while (valid? vars)
+        (if (closure? (car vals))
+            (begin
+                (display "compiling ")
+                (display (car vars))
+                (display "...\n")
+                (compile (car vals) env)
+                )
+            )
+        (set! vars (cdr vars))
+        (set! vals (cdr vals))
+        )
+    )
+
+(define (replace # f vars @)
+    (define i)
+    (define env (if (valid? @) (car @) #))
+    (define (helper var val expr)
+        (cond 
+            ((null? expr) nil)
+            ((eq? (type expr) 'CONS)
+                (if (eq? (car expr) var)
+                    (set-car! expr val)
+                    (helper var val (car expr))
+                    )
+                (helper var val (cdr expr))
+                )
+            )
+        )
+    (inspect vars)
+    (for-all i vars
+        (helper i (env i) (get 'code f))
+        )
+    'done
+    )
+
+(define (macro # f $)
+    ; # is bound to the calling environment
+    ; $ is bound to a list of unevaluated arguments
+    (define names (list (make-assoc (get 'parameters f) $)))
+    (define body (rewrite (get 'code f) names (get 'context f)))
+    (eval body #)
+    )
+
+(define (make-assoc xs ys)
+    (cond
+        ((null? xs) nil)
+        (else (cons (list (car xs) (car ys)) (make-assoc (cdr xs) (cdr ys))))
+        )
+    )
+
+(define (assoc x y)
+    (cond
+        ((null? y) #f)
+        ((equal? x (car (car y))) (car y))
+        (else (assoc x (cdr y)))
+        )
+    )
+
+(define (equal? a b)
+    (cond
+        ((null? a)
+            ;(println "returning" (null? b))
+            (null? b))
+        ((pair? a)
+            ;(println "pair returning "
+            ;(and (pair? b) (equal? (car a) (car b)) (equal? (cdr a) (cdr b))))
+            (and (pair? b) (equal? (car a) (car b)) (equal? (cdr a) (cdr b))))
+        ((eq? (type a) 'STRING)
+            (string-equal? a b))
+        ((eq? (type a) 'ARRAY) 
+            (array-equal? a b))
+        (else
+            ;(println "else returning "(eq? a b))
+            (eq? a b))
+        )
+    )
+
+(define (defined? id env)
+    (not (eq? (type (catch (get id env))) 'error))
+    )
+
+(define (closure? x) (and (object? x) (eq? (class x) 'closure)))
+(define (builtin? x) (and (object? x) (eq? (class x) 'builtIn)))

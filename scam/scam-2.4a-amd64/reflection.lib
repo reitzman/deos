@@ -1,0 +1,69 @@
+(define (prior #)
+    (define f (get '__constructor #))
+    (if (local? '__prior f)
+        (get '__prior f)
+        (throw 'reflectionException "prior field has not been set")
+        )
+    )
+    
+(define (redefine # $params $)
+    (if (not (pair? $params))
+        (throw 'reflectionException 
+            (string+
+                (fileName $params)
+                ",line "
+                (string (lineNumber $params))
+                ": can only redefine functions")))
+    (define p (car $params))
+    (define (zow)
+        (define pf 1)
+        this
+        )
+    (if (defined? p #)
+        (define pf (get p #))
+        (define pf (lambda (@) #f))
+        )
+    (define f (eval (cons 'define (cons $params $)) #))
+    (addSymbol '__prior pf f)
+    f
+    )
+
+
+(define (clone # item)
+    (define (cloneObject item)
+        (list 'object (cloneList (cadr item)) (cloneList (caddr item)))
+        )
+
+    (define (cloneObjectWithContext item env)
+        (define c (cloneObject item))
+        (set '__context env c)
+        c
+        )
+
+    (define (cloneList items)
+        (cond
+            ((null? items) nil)
+            ((pair? items) (cons (car items) (cloneList (cdr items))))
+            (else items)
+            )
+        )
+
+    (cond
+        ((closure? item) (cloneObjectWithContext item #))
+        ((thunk? item) (cloneObjectWithContext item #))
+        ((object? item) (cloneObject item))
+        ((pair? item) (cloneList item))
+        (else item)
+        )
+    )
+
+(define (compile-reflection #)
+    (include "compile.lib")
+    (println "compiling prior...")
+    (compile prior #)
+    (println "compiling redefine...")
+    (compile redefine #)
+    (println "compiling clone...")
+    (compile clone #)
+    (println "reflection.lib compiled.")
+    )

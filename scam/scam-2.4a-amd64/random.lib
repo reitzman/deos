@@ -1,0 +1,35 @@
+(define __RANDOM_MAX (randomMax))
+
+(define (randomReal)
+    (/ (real (randomInt)) __RANDOM_MAX)
+    )
+
+(define (randomRange low high)
+    (+ low (int (* (randomReal) (- high low))))
+    )
+
+(define (shuffle items)
+    (cond
+        ((null? items) 'done)
+        ((null? (cdr items)) 'done)
+        (else
+            (define index (randomRange 0 (length items)))
+            (define temp (getElement items 0))
+            (setElement items 0 (getElement items index))
+            (setElement items index temp)
+            (shuffle (cdr items))
+            )
+        )
+    )
+
+(define (flip) (randomRange 0 2))
+        
+
+;{
+(randomSeed (time))
+(inspect (shuffle '(1 2 3 4 5 6 7 8 9 0)))
+(inspect (shuffle '(1 2 3 4 5 6 7 8 9 0)))
+(inspect (flip))
+(inspect (flip))
+(inspect (flip))
+;}
