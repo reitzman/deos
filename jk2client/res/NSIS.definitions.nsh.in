@@ -1,0 +1,4 @@
+!define MV_VERSION "@MV_VERSION@"
+
+!define MAIN_EXE_NAME "@MVMP@"
+!define MUI_ICON "${RESDir}/mv-setup.ico"

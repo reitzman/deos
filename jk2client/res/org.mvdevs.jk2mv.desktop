@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=JK2MV
+Comment=Play Jedi Knight II
+Categories=Game;
+Exec=jk2mvmp
+Icon=org.mvdevs.jk2mv
+Terminal=false
