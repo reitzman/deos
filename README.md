@@ -4,10 +4,6 @@
 
 ### `make build`
 
-### `make sdl2`
-
-### `make mvsdk`
-
 ### `make clean`
 
 ### `make run`
