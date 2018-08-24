@@ -1,5 +1,8 @@
 all: clean clone init
 
+build:
+	echo "hello"
+
 clone:
 	-cd ext/ && rm -rf jk2mv libzt mvsdk
 	-cd ext/ && git clone git@github.com:desantis/jk2mv.git
@@ -19,9 +22,7 @@ init:
 	-mv ext/jk2mv/appveyor.yml appveyor.yml
 	-mv ext/jk2mv/CMakeLists.txt CMakeLists.txt
 	-mv ext/jk2mv/CVARS.rst CVARS.rst
-	-mv ext/jk2mv/LICENSE LICENSE.txt
-	-mv ext/jk2mv/README.md README.md
 
 clean:
 	-rm -rf assets build libs res src tools
-	-rm .editorconfig .gitignore .gitmodules .travis.yml appveyor.yml CMakeLists.txt CVARS.rst LICENSE.txt README.md
+	-rm .editorconfig .gitignore .gitmodules .travis.yml appveyor.yml CMakeLists.txt CVARS.rst
