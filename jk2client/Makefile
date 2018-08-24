@@ -1,6 +1,6 @@
-all: buildit
+all: clean clone init mvsdk sdl2 buildit
 
-buildit: clean clone init mvsdk sdl2
+buildit:
 	-mv ext/mvsdk/.git src/mvsdk/.git
 	-mv ext/jk2mv/.git .git
 	cd build && cmake -G "Unix Makefiles" -DUseInternalLibs=ON -DBuildPortableVersion=ON ../.
