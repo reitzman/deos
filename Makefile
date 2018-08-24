@@ -3,7 +3,7 @@ all:
 
 port: clone init clone
 
-clone:
+jk2:
 	cd ext && make
 
 init:
