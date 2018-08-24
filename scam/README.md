@@ -1,0 +1,1 @@
+# The Scam Programming Langauge
