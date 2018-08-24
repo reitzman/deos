@@ -1,0 +1,2 @@
+all:
+	cd ext && make
